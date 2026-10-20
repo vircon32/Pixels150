@@ -1,0 +1,11 @@
+# Image files
+*.png binary
+*.gif binary
+*.ase binary
+*.psd binary
+
+#-------------------------
+# Other possible files
+#-------------------------
+*.exe binary
+*.zip binary
