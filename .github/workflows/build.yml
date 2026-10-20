@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install static libraries (Windows)
         if: runner.os == 'Windows'
@@ -100,7 +100,7 @@ jobs:
           tar -czf '${{ matrix.artifact }}.tar.gz' -C dist .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact }}
           path: |
