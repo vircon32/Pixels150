@@ -1,0 +1,109 @@
+name: Build Pixels150
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-2025
+            artifact: pixels150-windows-x64
+          - name: Ubuntu x64
+            os: ubuntu-24.04
+            artifact: pixels150-ubuntu-x64
+          - name: macOS ARM64
+            os: macos-15
+            artifact: pixels150-macos-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install static libraries (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: vcpkg install libpng:x64-windows-static
+
+      - name: Install static libraries (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpng-dev zlib1g-dev
+
+      - name: Install libpng (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libpng
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -A x64
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static
+
+      - name: Configure (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DPNG_LIBRARY=/usr/lib/x86_64-linux-gnu/libpng16.a \
+            -DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.a
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          PNG_PREFIX="$(brew --prefix libpng)"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DPNG_LIBRARY="$PNG_PREFIX/lib/libpng16.a" \
+            -DPNG_PNG_INCLUDE_DIR="$PNG_PREFIX/include"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Verify no external PNG dependency (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          ldd build/pixels150
+          if ldd build/pixels150 | grep -E 'libpng|libz\.so'; then
+            echo 'Unexpected dynamic dependency on libpng or zlib' >&2
+            exit 1
+          fi
+
+      - name: Verify no external PNG dependency (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          otool -L build/pixels150
+          if otool -L build/pixels150 | grep -E '/opt/homebrew/|/usr/local/'; then
+            echo 'Unexpected Homebrew dynamic dependency' >&2
+            exit 1
+          fi
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item build/Release/pixels150.exe dist/
+          Copy-Item License.md dist/
+          Compress-Archive -Path dist/* -DestinationPath '${{ matrix.artifact }}.zip'
+
+      - name: Package (Ubuntu/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/pixels150 License.md dist/
+          tar -czf '${{ matrix.artifact }}.tar.gz' -C dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.zip
+            ${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
