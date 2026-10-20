@@ -326,7 +326,8 @@ int main( int NumberOfArguments, char** Arguments )
     // print usage if needed
     if( NumberOfArguments != 3 )
     {
-        cerr << "Usage: Pixels150 <input.png> <output.png>\n";
+        cerr << "Pixels150 uses pixel art techniques to upscale a PNG image to 150%." << endl;
+        cerr << "Usage: pixels150 <input.png> <output.png>" << endl;
         return 2;
     }
     
@@ -351,7 +352,7 @@ int main( int NumberOfArguments, char** Arguments )
     }
     catch( const exception& e )
     {
-        cerr << "Error: " << e.what() << "\n";
+        cerr << "Error: " << e.what() << endl;
         return 1;
     }
 }
