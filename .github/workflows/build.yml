@@ -3,10 +3,14 @@ name: Build Pixels150
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -23,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install static libraries (Windows)
         if: runner.os == 'Windows'
@@ -32,15 +36,18 @@ jobs:
 
       - name: Install static libraries (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libpng-dev zlib1g-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpng-dev zlib1g-dev
 
-      - name: Install libpng (macOS)
+      - name: Install static libraries (macOS)
         if: runner.os == 'macOS'
-        run: brew install libpng
+        run: brew install libpng zlib
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        # Use the static MSVC runtime to match the vcpkg libraries.
         run: >-
           cmake -S . -B build -A x64
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
@@ -57,9 +64,12 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           PNG_PREFIX="$(brew --prefix libpng)"
+          ZLIB_PREFIX="$(brew --prefix zlib)"
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
             -DPNG_LIBRARY="$PNG_PREFIX/lib/libpng16.a" \
-            -DPNG_PNG_INCLUDE_DIR="$PNG_PREFIX/include"
+            -DPNG_PNG_INCLUDE_DIR="$PNG_PREFIX/include" \
+            -DZLIB_LIBRARY="$ZLIB_PREFIX/lib/libz.a" \
+            -DZLIB_INCLUDE_DIR="$ZLIB_PREFIX/include"
 
       - name: Build
         run: cmake --build build --config Release
@@ -94,13 +104,14 @@ jobs:
       - name: Package (Ubuntu/macOS)
         if: runner.os != 'Windows'
         shell: bash
+        # A tar archive preserves the executable permission when downloaded.
         run: |
           mkdir -p dist
           cp build/pixels150 License.md dist/
           tar -czf '${{ matrix.artifact }}.tar.gz' -C dist .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: |
